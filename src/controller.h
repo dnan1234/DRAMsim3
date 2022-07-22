@@ -17,7 +17,10 @@
 
 namespace dramsim3 {
 
-enum class RowBufPolicy { OPEN_PAGE, CLOSE_PAGE, SIZE };
+enum class RowBufPolicy { OPEN_PAGE, CLOSE_PAGE, SIZE, ADAPTIVE_PAGE };
+
+//extern int mistake_counter;
+//extern int last_row;
 
 class Controller {
    public:

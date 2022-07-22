@@ -94,16 +94,34 @@ Command BankState::GetReadyCommand(const Command& cmd, uint64_t clk) const {
 }
 
 void BankState::UpdateState(const Command& cmd) {
+    //mistake_counter++;
+    //std::cout << mistake_counter << "\n";
     switch (state_) {
         case State::OPEN:
+        //printf("OPEN DOIA\n");
             switch (cmd.cmd_type) {
                 case CommandType::READ:
+                    last_row = cmd.Row();
                 case CommandType::WRITE:
                     row_hit_count_++;
                     break;
                 case CommandType::READ_PRECHARGE:
+                    if(cmd.Row() == last_row)
+                    {
+                        mistake_counter++; //page_empty that could have been a page_hit NANDAN
+                    }
+                    last_row = cmd.Row(); //NANDAN
+                    state_ = State::CLOSED;
+                    open_row_ = -1;
+                    row_hit_count_ = 0;
+                    break;
                 case CommandType::WRITE_PRECHARGE:
                 case CommandType::PRECHARGE:
+                   // if(cmd.Row() == last_row)
+                   // {
+                        mistake_counter--; //page_miss that could have been a page_empty NANDAN
+                   // }
+                    
                     state_ = State::CLOSED;
                     open_row_ = -1;
                     row_hit_count_ = 0;
@@ -123,6 +141,10 @@ void BankState::UpdateState(const Command& cmd) {
                 case CommandType::REFRESH_BANK:
                     break;
                 case CommandType::ACTIVATE:
+                   // if(cmd.Row() == last_row)
+                  //  {
+                 //       mistake_counter++; //page_empty that could have been a page_hit NANDAN
+                 //   }
                     state_ = State::OPEN;
                     open_row_ = cmd.Row();
                     break;
@@ -161,6 +183,7 @@ void BankState::UpdateState(const Command& cmd) {
         default:
             AbruptExit(__FILE__, __LINE__);
     }
+    
     return;
 }
 

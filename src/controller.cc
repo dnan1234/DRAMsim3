@@ -4,6 +4,8 @@
 #include <limits>
 
 namespace dramsim3 {
+int mistake_counter = 50;
+int last_row = -1;
 
 #ifdef THERMAL
 Controller::Controller(int channel, const Config &config, const Timing &timing,
@@ -22,6 +24,8 @@ Controller::Controller(int channel, const Config &config, const Timing &timing)
       thermal_calc_(thermal_calc),
 #endif  // THERMAL
       is_unified_queue_(config.unified_queue),
+           // row_buf_policy_(RowBufPolicy::ADAPTIVE_PAGE), //NANDAN
+
       row_buf_policy_(config.row_buf_policy == "CLOSE_PAGE"
                           ? RowBufPolicy::CLOSE_PAGE
                           : RowBufPolicy::OPEN_PAGE),
@@ -76,22 +80,28 @@ void Controller::ClockTick() {
     if (!cmd.IsValid()) {
         cmd = cmd_queue_.GetCommandToIssue();
     }
+  //  if(cmd.Row() != -1)
+    //    std::cout << "addr is in clock tick after NOT valid " << cmd.Row() << "\n"; //NANDAN DEBUG
 
     if (cmd.IsValid()) {
         IssueCommand(cmd);
         cmd_issued = true;
-
+        if(cmd.Row() != -1)
+     //       std::cout << "addr is in clock tick in valid " << cmd.Row() << "\n"; //NANDAN DEBUG
         if (config_.enable_hbm_dual_cmd) {
             auto second_cmd = cmd_queue_.GetCommandToIssue();
             if (second_cmd.IsValid()) {
                 if (second_cmd.IsReadWrite() != cmd.IsReadWrite()) {
                     IssueCommand(second_cmd);
+              //      std::cout << "addr is in clock tick in valid 2nd cmd " << cmd.Row() << "\n"; //NANDAN DEBUG
                     simple_stats_.Increment("hbm_dual_cmds");
                 }
             }
         }
     }
-
+  //  if(cmd.Row() != -1)
+   //     std::cout << "addr is in clock tick " << cmd.Row() << "\n"; //NANDAN DEBUG
+    
     // power updates pt 1
     for (int i = 0; i < config_.ranks; i++) {
         if (channel_state_.IsRankSelfRefreshing(i)) {
@@ -116,6 +126,7 @@ void Controller::ClockTick() {
                 // wake up!
                 if (!cmd_queue_.rank_q_empty[i]) {
                     auto addr = Address();
+		 //   std::cout << "addr is in clock tick " << addr.row << "\n"; //NANDAN DEBUG
                     addr.rank = i;
                     auto cmd = Command(CommandType::SREF_EXIT, addr, -1);
                     cmd = channel_state_.GetReadyCommand(cmd, clk_);
@@ -132,6 +143,8 @@ void Controller::ClockTick() {
                     addr.rank = i;
                     auto cmd = Command(CommandType::SREF_ENTER, addr, -1);
                     cmd = channel_state_.GetReadyCommand(cmd, clk_);
+
+		//    std::cout << "addr is in clock tick " << addr.row << "\n"; //NANDAN DEBUG
                     if (cmd.IsValid()) {
                         IssueCommand(cmd);
                         break;
@@ -235,7 +248,19 @@ void Controller::IssueCommand(const Command &cmd) {
     thermal_calc_.UpdateCMDPower(channel_id_, cmd, clk_);
 #endif  // THERMAL
     // if read/write, update pending queue and return queue
+    std::cout<< std::left << std::setw(18) << clk_ << " " << cmd << std::endl;
+    if(cmd.Row() != -1)
+    {
+        std::cout << " cmd address issue " << cmd.Row() << "\n"; //NANDAN
+        if(!cmd.IsReadWrite()) {
+            std::cout << "NotReadWrite" << std::endl;
+            printf("enum type cmd %d\n\n", cmd.cmd_type);
+        }
+    }
     if (cmd.IsRead()) {
+	//std::cout << "in Read hex addr " << cmd.hex_addr << "\n"; //NANDAN
+   	std::cout << "in Read row addr " << cmd.Row() << "\n"; //NANDAN
+
         auto num_reads = pending_rd_q_.count(cmd.hex_addr);
         if (num_reads == 0) {
             std::cerr << cmd.hex_addr << " not in read queue! " << std::endl;
@@ -251,6 +276,9 @@ void Controller::IssueCommand(const Command &cmd) {
         }
     } else if (cmd.IsWrite()) {
         // there should be only 1 write to the same location at a time
+	//std::cout << "in Write hex addr " << cmd.hex_addr << "\n";//NANDAN
+   	std::cout << "in Write row addr " << cmd.Row() << "\n"; //NANDAN
+
         auto it = pending_wr_q_.find(cmd.hex_addr);
         if (it == pending_wr_q_.end()) {
             std::cerr << cmd.hex_addr << " not in write queue!" << std::endl;
@@ -263,17 +291,39 @@ void Controller::IssueCommand(const Command &cmd) {
     // must update stats before states (for row hits)
     UpdateCommandStats(cmd);
     channel_state_.UpdateTimingAndStates(cmd, clk_);
+
+    std::cout << "mistake counter " << mistake_counter << "\n";
 }
 
 Command Controller::TransToCommand(const Transaction &trans) {
     auto addr = config_.AddressMapping(trans.addr);
     CommandType cmd_type;
     if (row_buf_policy_ == RowBufPolicy::OPEN_PAGE) {
+        
+ //   std::cout << "policy os OPEN PAGE\n"; 
         cmd_type = trans.is_write ? CommandType::WRITE : CommandType::READ;
-    } else {
+    } else if (row_buf_policy_ == RowBufPolicy::CLOSE_PAGE)  {
         cmd_type = trans.is_write ? CommandType::WRITE_PRECHARGE
                                   : CommandType::READ_PRECHARGE;
+  // std::cout << "policy os CLOSE PAGE\n"; 
+
+    } else if (row_buf_policy_ == RowBufPolicy::ADAPTIVE_PAGE){
+        if(mistake_counter > 49)
+        {
+            cmd_type = trans.is_write ? CommandType::WRITE : CommandType::READ;
+        } else 
+        {
+            cmd_type = trans.is_write ? CommandType::WRITE_PRECHARGE //remove write_precharge and compare
+                                     : CommandType::READ_PRECHARGE;
+        }
+
     }
+    	//if counter > ADAPTIVE_THRESHOLD
+//		cmd_type = trans.is_write ? CommandType::WRITE : CommandType::READ;
+	//else
+//		cmd_type = trans.is_write ? CommandType::WRITE_PRECHARGE
+  //                                 : CommandType::READ_PRECHARGE;
+   // }
     return Command(cmd_type, addr, trans.addr);
 }
 

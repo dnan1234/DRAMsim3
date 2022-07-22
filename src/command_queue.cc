@@ -35,6 +35,7 @@ CommandQueue::CommandQueue(int channel_id, const Config& config,
 
 Command CommandQueue::GetCommandToIssue() {
     for (int i = 0; i < num_queues_; i++) {
+//	printf("HIHIHIHHI NANDAN DEBUG\n");
         auto& queue = GetNextQueue();
         // if we're refresing, skip the command queues that are involved
         if (is_in_ref_) {
@@ -44,6 +45,7 @@ Command CommandQueue::GetCommandToIssue() {
         }
         auto cmd = GetFirstReadyInQueue(queue);
         if (cmd.IsValid()) {
+	 //  std::cout << "cmd address " << cmd.Row() << std::endl; //NANDAN DEBUG
             if (cmd.IsReadWrite()) {
                 EraseRWCommand(cmd);
             }

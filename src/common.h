@@ -6,6 +6,8 @@
 #include <vector>
 
 namespace dramsim3 {
+extern int mistake_counter;
+extern int last_row;
 
 struct Address {
     Address()

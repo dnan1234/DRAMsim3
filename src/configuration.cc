@@ -221,7 +221,7 @@ void Config::InitSystemParams() {
     bus_width = GetInteger("system", "bus_width", 64);
     address_mapping = reader.Get("system", "address_mapping", "chrobabgraco");
     queue_structure = reader.Get("system", "queue_structure", "PER_BANK");
-    row_buf_policy = reader.Get("system", "row_buf_policy", "OPEN_PAGE");
+    row_buf_policy = reader.Get("system", "row_buf_policy", "ADAPTIVE_PAGE");
     cmd_queue_size = GetInteger("system", "cmd_queue_size", 16);
     trans_queue_size = GetInteger("system", "trans_queue_size", 32);
     unified_queue = reader.GetBoolean("system", "unified_queue", false);
